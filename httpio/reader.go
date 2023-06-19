@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/caeret/logging"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,15 +13,12 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	logging "github.com/ipfs/go-log/v2"
 	"golang.org/x/xerrors"
 
 	"github.com/filecoin-project/go-jsonrpc"
 )
 
-var log = logging.Logger("rpc")
-
-func ReaderParamEncoder(addr string) jsonrpc.Option {
+func ReaderParamEncoder(logger logging.Logger, addr string) jsonrpc.Option {
 	return jsonrpc.WithParamEncoder(new(io.Reader), func(value reflect.Value) (reflect.Value, error) {
 		r := value.Interface().(io.Reader)
 
@@ -33,14 +31,14 @@ func ReaderParamEncoder(addr string) jsonrpc.Option {
 
 			resp, err := http.Post(u.String(), "application/octet-stream", r)
 			if err != nil {
-				log.Errorf("sending reader param: %+v", err)
+				logger.Error("sending reader param", "error", err)
 				return
 			}
 
 			defer resp.Body.Close()
 
 			if resp.StatusCode != 200 {
-				log.Errorf("sending reader param: non-200 status: ", resp.Status)
+				logger.Error("sending reader param: non-200 status", "status", resp.Status)
 				return
 			}
 
@@ -68,7 +66,7 @@ func (w *waitReadCloser) Close() error {
 	return w.ReadCloser.Close()
 }
 
-func ReaderParamDecoder() (http.HandlerFunc, jsonrpc.ServerOption) {
+func ReaderParamDecoder(logger logging.Logger) (http.HandlerFunc, jsonrpc.ServerOption) {
 	var readersLk sync.Mutex
 	readers := map[uuid.UUID]chan *waitReadCloser{}
 
@@ -95,7 +93,7 @@ func ReaderParamDecoder() (http.HandlerFunc, jsonrpc.ServerOption) {
 		select {
 		case ch <- wr:
 		case <-req.Context().Done():
-			log.Error("context error in reader stream handler (1): %v", req.Context().Err())
+			logger.Error("context error in reader stream handler (1)", "error", req.Context().Err())
 			resp.WriteHeader(500)
 			return
 		}
@@ -103,7 +101,7 @@ func ReaderParamDecoder() (http.HandlerFunc, jsonrpc.ServerOption) {
 		select {
 		case <-wr.wait:
 		case <-req.Context().Done():
-			log.Error("context error in reader stream handler (2): %v", req.Context().Err())
+			logger.Error("context error in reader stream handler (2)", "error", req.Context().Err())
 			resp.WriteHeader(500)
 			return
 		}
