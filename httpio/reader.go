@@ -14,8 +14,6 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/xerrors"
-
-	"github.com/filecoin-project/go-jsonrpc"
 )
 
 func ReaderParamEncoder(logger logging.Logger, addr string) jsonrpc.Option {

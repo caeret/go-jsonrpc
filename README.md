@@ -1,7 +1,7 @@
 go-jsonrpc
 ==================
 
-[![go.dev reference](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white&style=flat-square)](https://pkg.go.dev/github.com/filecoin-project/go-jsonrpc)
+[![go.dev reference](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white&style=flat-square)](https://pkg.go.dev/github.com/caeret/go-jsonrpc)
 [![](https://img.shields.io/badge/made%20by-Protocol%20Labs-blue.svg?style=flat-square)](https://protocol.ai)
 
 > Low Boilerplate JSON-RPC 2.0 library
@@ -81,7 +81,7 @@ type _ interface {
     // Returning errors
     // * For some connection errors, go-jsonrpc will return jsonrpc.RPCConnectionError{}.
     // * RPC-returned errors will be constructed with basic errors.New(__"string message"__)
-    // * JSON-RPC error codes can be mapped to typed errors with jsonrpc.Errors - https://pkg.go.dev/github.com/filecoin-project/go-jsonrpc#Errors
+    // * JSON-RPC error codes can be mapped to typed errors with jsonrpc.Errors - https://pkg.go.dev/github.com/caeret/go-jsonrpc#Errors
     // * For typed errors to work, server needs to be constructed with the `WithServerErrors`
     //   option, and the client needs to be constructed with the `WithErrors` option
     Func3() error
@@ -137,4 +137,4 @@ PRs are welcome!
 
 ## License
 
-Dual-licensed under [MIT](https://github.com/filecoin-project/go-jsonrpc/blob/master/LICENSE-MIT) + [Apache 2.0](https://github.com/filecoin-project/go-jsonrpc/blob/master/LICENSE-APACHE)
+Dual-licensed under [MIT](https://github.com/caeret/go-jsonrpc/blob/master/LICENSE-MIT) + [Apache 2.0](https://github.com/caeret/go-jsonrpc/blob/master/LICENSE-APACHE)
