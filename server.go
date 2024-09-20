@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"runtime/pprof"
 	"strings"
@@ -84,7 +85,7 @@ func (s *RPCServer) handleWS(ctx context.Context, w http.ResponseWriter, r *http
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Errorw("upgrading connection", "error", err)
+		slog.Error("upgrading connection", "error", err)
 		// note that upgrader.Upgrade will set http error if there is an error
 		return
 	}
@@ -99,7 +100,7 @@ func (s *RPCServer) handleWS(ctx context.Context, w http.ResponseWriter, r *http
 	if s.reverseClientBuilder != nil {
 		ctx, err = s.reverseClientBuilder(ctx, wc)
 		if err != nil {
-			log.Errorf("failed to build reverse client: %s", err)
+			slog.Error("failed to build reverse client", "error", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -111,7 +112,7 @@ func (s *RPCServer) handleWS(ctx context.Context, w http.ResponseWriter, r *http
 	})
 
 	if err := c.Close(); err != nil {
-		log.Errorw("closing websocket connection", "error", err)
+		slog.Error("closing websocket connection", "error", err)
 		return
 	}
 }
@@ -136,7 +137,7 @@ func (s *RPCServer) HandleRequest(ctx context.Context, r io.Reader, w io.Writer)
 }
 
 func rpcError(wf func(func(io.Writer)), req *request, code ErrorCode, err error) {
-	log.Errorf("RPC Error: %s", err)
+	slog.Error("rpc error", "error", err)
 	wf(func(w io.Writer) {
 		if hw, ok := w.(http.ResponseWriter); ok {
 			if code == rpcInvalidRequest {
@@ -146,7 +147,7 @@ func rpcError(wf func(func(io.Writer)), req *request, code ErrorCode, err error)
 			}
 		}
 
-		log.Warnf("rpc error: %s", err)
+		slog.Error("RPC Error", "error", err)
 
 		if req == nil {
 			req = &request{}
@@ -163,7 +164,7 @@ func rpcError(wf func(func(io.Writer)), req *request, code ErrorCode, err error)
 
 		err = json.NewEncoder(w).Encode(resp)
 		if err != nil {
-			log.Warnf("failed to write rpc error: %s", err)
+			slog.Warn("failed to write rpc", "error", err)
 			return
 		}
 	})

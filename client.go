@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	logging "github.com/ipfs/go-log/v2"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 	"golang.org/x/xerrors"
@@ -32,8 +32,6 @@ const (
 var (
 	errorType   = reflect.TypeOf(new(error)).Elem()
 	contextType = reflect.TypeOf(new(context.Context)).Elem()
-
-	log = logging.Logger("rpc")
 
 	_defaultHTTPClient = &http.Client{
 		Transport: &http.Transport{
@@ -92,8 +90,8 @@ type ClientCloser func()
 // handler must be pointer to a struct with function fields
 // Returned value closes the client connection
 // TODO: Example
-func NewClient(ctx context.Context, addr string, namespace string, handler interface{}, requestHeader http.Header) (ClientCloser, error) {
-	return NewMergeClient(ctx, addr, namespace, []interface{}{handler}, requestHeader)
+func NewClient(ctx context.Context, addr string, namespace string, handler interface{}, requestHeader http.Header, opts ...Option) (ClientCloser, error) {
+	return NewMergeClient(ctx, addr, namespace, []interface{}{handler}, requestHeader, opts...)
 }
 
 type client struct {
@@ -127,7 +125,6 @@ func NewMergeClient(ctx context.Context, addr string, namespace string, outs []i
 	default:
 		return nil, xerrors.Errorf("unknown url scheme '%s'", u.Scheme)
 	}
-
 }
 
 // NewCustomClient is like NewMergeClient in single-request (http) mode, except it allows for a custom doRequest function
@@ -379,7 +376,7 @@ func (c *client) setupRequestChan() chan clientRequest {
 				select {
 				case requests <- cancelReq:
 				case <-c.exiting:
-					log.Warn("failed to send request cancellation, websocket routing exited")
+					slog.Warn("failed to send request cancellation, websocket routing exited")
 				}
 
 			}
@@ -466,9 +463,9 @@ func (c *client) makeOutChan(ctx context.Context, ftyp reflect.Type, valOut int)
 						buf.PushBack(vvval)
 						if buf.Len() > 1 {
 							if buf.Len() > 10 {
-								log.Warnw("rpc output message buffer", "n", buf.Len())
+								slog.Warn("rpc output message buffer", "n", buf.Len())
 							} else {
-								log.Debugw("rpc output message buffer", "n", buf.Len())
+								slog.Debug("rpc output message buffer", "n", buf.Len())
 							}
 						}
 					} else {
@@ -494,12 +491,12 @@ func (c *client) makeOutChan(ctx context.Context, ftyp reflect.Type, valOut int)
 
 			val := reflect.New(ftyp.Out(valOut).Elem())
 			if err := json.Unmarshal(result, val.Interface()); err != nil {
-				log.Errorf("error unmarshaling chan response: %s", err)
+				slog.Error("error unmarshaling chan response", "error", err)
 				return
 			}
 
 			if ctx.Err() != nil {
-				log.Errorf("got rpc message with cancelled context: %s", ctx.Err())
+				slog.Error("got rpc message with cancelled context", "error", ctx.Err())
 				return
 			}
 
@@ -554,7 +551,6 @@ func (fn *rpcFunc) processResponse(resp clientResponse, rval reflect.Value) []re
 	if fn.errOut != -1 {
 		out[fn.errOut] = reflect.New(errorType).Elem()
 		if resp.Error != nil {
-
 			out[fn.errOut].Set(resp.Error.val(fn.client.errors))
 		}
 	}
@@ -678,9 +674,9 @@ func (fn *rpcFunc) handleRpcCall(args []reflect.Value) (results []reflect.Value)
 			val := reflect.New(fn.ftyp.Out(fn.valOut))
 
 			if resp.Result != nil {
-				log.Debugw("rpc result", "type", fn.ftyp.Out(fn.valOut))
+				slog.Debug("rpc result", "type", fn.ftyp.Out(fn.valOut))
 				if err := json.Unmarshal(resp.Result, val.Interface()); err != nil {
-					log.Warnw("unmarshaling failed", "message", string(resp.Result))
+					slog.Warn("unmarshaling failed", "message", string(resp.Result))
 					return fn.processError(xerrors.Errorf("unmarshaling result: %w", err))
 				}
 			}
