@@ -16,9 +16,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/caeret/logging"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	logging "github.com/ipfs/go-log/v2"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 	"golang.org/x/xerrors"
@@ -32,8 +32,6 @@ const (
 var (
 	errorType   = reflect.TypeOf(new(error)).Elem()
 	contextType = reflect.TypeOf(new(context.Context)).Elem()
-
-	log = logging.Logger("rpc")
 
 	_defaultHTTPClient = &http.Client{
 		Transport: &http.Transport{
@@ -92,11 +90,12 @@ type ClientCloser func()
 // handler must be pointer to a struct with function fields
 // Returned value closes the client connection
 // TODO: Example
-func NewClient(ctx context.Context, addr string, namespace string, handler interface{}, requestHeader http.Header) (ClientCloser, error) {
-	return NewMergeClient(ctx, addr, namespace, []interface{}{handler}, requestHeader)
+func NewClient(ctx context.Context, logger logging.Logger, addr string, namespace string, handler interface{}, requestHeader http.Header) (ClientCloser, error) {
+	return NewMergeClient(ctx, logger, addr, namespace, []interface{}{handler}, requestHeader)
 }
 
 type client struct {
+	logger        logging.Logger
 	namespace     string
 	paramEncoders map[reflect.Type]ParamEncoder
 	errors        *Errors
@@ -108,7 +107,7 @@ type client struct {
 
 // NewMergeClient is like NewClient, but allows to specify multiple structs
 // to be filled in the same namespace, using one connection
-func NewMergeClient(ctx context.Context, addr string, namespace string, outs []interface{}, requestHeader http.Header, opts ...Option) (ClientCloser, error) {
+func NewMergeClient(ctx context.Context, logger logging.Logger, addr string, namespace string, outs []interface{}, requestHeader http.Header, opts ...Option) (ClientCloser, error) {
 	config := defaultConfig()
 	for _, o := range opts {
 		o(&config)
@@ -121,13 +120,12 @@ func NewMergeClient(ctx context.Context, addr string, namespace string, outs []i
 
 	switch u.Scheme {
 	case "ws", "wss":
-		return websocketClient(ctx, addr, namespace, outs, requestHeader, config)
+		return websocketClient(ctx, logger, addr, namespace, outs, requestHeader, config)
 	case "http", "https":
-		return httpClient(ctx, addr, namespace, outs, requestHeader, config)
+		return httpClient(ctx, logger, addr, namespace, outs, requestHeader, config)
 	default:
 		return nil, xerrors.Errorf("unknown url scheme '%s'", u.Scheme)
 	}
-
 }
 
 // NewCustomClient is like NewMergeClient in single-request (http) mode, except it allows for a custom doRequest function
@@ -190,8 +188,9 @@ func NewCustomClient(namespace string, outs []interface{}, doRequest func(ctx co
 	}, nil
 }
 
-func httpClient(ctx context.Context, addr string, namespace string, outs []interface{}, requestHeader http.Header, config Config) (ClientCloser, error) {
+func httpClient(ctx context.Context, logger logging.Logger, addr string, namespace string, outs []interface{}, requestHeader http.Header, config Config) (ClientCloser, error) {
 	c := client{
+		logger:        logger,
 		namespace:     namespace,
 		paramEncoders: config.paramEncoders,
 		errors:        config.errors,
@@ -263,7 +262,7 @@ func httpClient(ctx context.Context, addr string, namespace string, outs []inter
 	}, nil
 }
 
-func websocketClient(ctx context.Context, addr string, namespace string, outs []interface{}, requestHeader http.Header, config Config) (ClientCloser, error) {
+func websocketClient(ctx context.Context, logger logging.Logger, addr string, namespace string, outs []interface{}, requestHeader http.Header, config Config) (ClientCloser, error) {
 	connFactory := func() (*websocket.Conn, error) {
 		conn, _, err := websocket.DefaultDialer.Dial(addr, requestHeader)
 		if err != nil {
@@ -287,6 +286,7 @@ func websocketClient(ctx context.Context, addr string, namespace string, outs []
 	}
 
 	c := client{
+		logger:        logger,
 		namespace:     namespace,
 		paramEncoders: config.paramEncoders,
 		errors:        config.errors,
@@ -300,7 +300,7 @@ func websocketClient(ctx context.Context, addr string, namespace string, outs []
 
 	var hnd reqestHandler
 	if len(config.reverseHandlers) > 0 {
-		h := makeHandler(defaultServerConfig())
+		h := makeHandler(logger, defaultServerConfig())
 		h.aliasedMethods = config.aliasedHandlerMethods
 		for _, reverseHandler := range config.reverseHandlers {
 			h.register(reverseHandler.ns, reverseHandler.hnd)
@@ -379,7 +379,7 @@ func (c *client) setupRequestChan() chan clientRequest {
 				select {
 				case requests <- cancelReq:
 				case <-c.exiting:
-					log.Warn("failed to send request cancellation, websocket routing exited")
+					c.logger.Warn("failed to send request cancellation, websocket routing exited")
 				}
 
 			}
@@ -466,9 +466,9 @@ func (c *client) makeOutChan(ctx context.Context, ftyp reflect.Type, valOut int)
 						buf.PushBack(vvval)
 						if buf.Len() > 1 {
 							if buf.Len() > 10 {
-								log.Warnw("rpc output message buffer", "n", buf.Len())
+								c.logger.Warn("rpc output message buffer", "n", buf.Len())
 							} else {
-								log.Debugw("rpc output message buffer", "n", buf.Len())
+								c.logger.Debug("rpc output message buffer", "n", buf.Len())
 							}
 						}
 					} else {
@@ -494,12 +494,12 @@ func (c *client) makeOutChan(ctx context.Context, ftyp reflect.Type, valOut int)
 
 			val := reflect.New(ftyp.Out(valOut).Elem())
 			if err := json.Unmarshal(result, val.Interface()); err != nil {
-				log.Errorf("error unmarshaling chan response: %s", err)
+				c.logger.Error("error unmarshaling chan response", "error", err)
 				return
 			}
 
 			if ctx.Err() != nil {
-				log.Errorf("got rpc message with cancelled context: %s", ctx.Err())
+				c.logger.Error("got rpc message with cancelled context", "error", ctx.Err())
 				return
 			}
 
@@ -554,7 +554,6 @@ func (fn *rpcFunc) processResponse(resp clientResponse, rval reflect.Value) []re
 	if fn.errOut != -1 {
 		out[fn.errOut] = reflect.New(errorType).Elem()
 		if resp.Error != nil {
-
 			out[fn.errOut].Set(resp.Error.val(fn.client.errors))
 		}
 	}
@@ -678,9 +677,9 @@ func (fn *rpcFunc) handleRpcCall(args []reflect.Value) (results []reflect.Value)
 			val := reflect.New(fn.ftyp.Out(fn.valOut))
 
 			if resp.Result != nil {
-				log.Debugw("rpc result", "type", fn.ftyp.Out(fn.valOut))
+				fn.client.logger.Debug("rpc result", "type", fn.ftyp.Out(fn.valOut))
 				if err := json.Unmarshal(resp.Result, val.Interface()); err != nil {
-					log.Warnw("unmarshaling failed", "message", string(resp.Result))
+					fn.client.logger.Warn("unmarshaling failed", "message", string(resp.Result))
 					return fn.processError(xerrors.Errorf("unmarshaling result: %w", err))
 				}
 			}

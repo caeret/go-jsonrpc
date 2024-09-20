@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/caeret/logging"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
@@ -47,6 +48,7 @@ func GetConnectionType(ctx context.Context) ConnectionType {
 
 // RPCServer provides a jsonrpc 2.0 http server handler
 type RPCServer struct {
+	logger logging.Logger
 	*handler
 	reverseClientBuilder func(context.Context, *wsConn) (context.Context, error)
 
@@ -54,14 +56,15 @@ type RPCServer struct {
 }
 
 // NewServer creates new RPCServer instance
-func NewServer(opts ...ServerOption) *RPCServer {
+func NewServer(logger logging.Logger, opts ...ServerOption) *RPCServer {
 	config := defaultServerConfig()
 	for _, o := range opts {
 		o(&config)
 	}
 
 	return &RPCServer{
-		handler:              makeHandler(config),
+		logger:               logger,
+		handler:              makeHandler(logger, config),
 		reverseClientBuilder: config.reverseClientBuilder,
 
 		pingInterval: config.pingInterval,
@@ -84,12 +87,13 @@ func (s *RPCServer) handleWS(ctx context.Context, w http.ResponseWriter, r *http
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Errorw("upgrading connection", "error", err)
+		s.logger.Error("upgrading connection", "error", err)
 		// note that upgrader.Upgrade will set http error if there is an error
 		return
 	}
 
 	wc := &wsConn{
+		logger:       s.logger,
 		conn:         c,
 		handler:      s,
 		pingInterval: s.pingInterval,
@@ -99,7 +103,7 @@ func (s *RPCServer) handleWS(ctx context.Context, w http.ResponseWriter, r *http
 	if s.reverseClientBuilder != nil {
 		ctx, err = s.reverseClientBuilder(ctx, wc)
 		if err != nil {
-			log.Errorf("failed to build reverse client: %s", err)
+			s.logger.Error("failed to build reverse client", "error", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -111,7 +115,7 @@ func (s *RPCServer) handleWS(ctx context.Context, w http.ResponseWriter, r *http
 	})
 
 	if err := c.Close(); err != nil {
-		log.Errorw("closing websocket connection", "error", err)
+		s.logger.Error("closing websocket connection", "error", err)
 		return
 	}
 }
@@ -135,8 +139,8 @@ func (s *RPCServer) HandleRequest(ctx context.Context, r io.Reader, w io.Writer)
 	s.handleReader(ctx, r, w, rpcError)
 }
 
-func rpcError(wf func(func(io.Writer)), req *request, code ErrorCode, err error) {
-	log.Errorf("RPC Error: %s", err)
+func rpcError(logger logging.Logger, wf func(func(io.Writer)), req *request, code ErrorCode, err error) {
+	logger.Error("rpc error", "error", err)
 	wf(func(w io.Writer) {
 		if hw, ok := w.(http.ResponseWriter); ok {
 			if code == rpcInvalidRequest {
@@ -146,7 +150,7 @@ func rpcError(wf func(func(io.Writer)), req *request, code ErrorCode, err error)
 			}
 		}
 
-		log.Warnf("rpc error: %s", err)
+		logger.Error("RPC Error", "error", err)
 
 		if req == nil {
 			req = &request{}
@@ -163,7 +167,7 @@ func rpcError(wf func(func(io.Writer)), req *request, code ErrorCode, err error)
 
 		err = json.NewEncoder(w).Encode(resp)
 		if err != nil {
-			log.Warnf("failed to write rpc error: %s", err)
+			logger.Warn("failed to write rpc", "error", err)
 			return
 		}
 	})
