@@ -228,7 +228,6 @@ func TestRPCBadConnection(t *testing.T) {
 	require.True(t, errors.As(err, new(*RPCConnectionError)))
 
 	defer closer()
-
 }
 
 func TestRPC(t *testing.T) {
@@ -694,7 +693,7 @@ func (h *ChanHandler) Sub(ctx context.Context, i int, eq int) (<-chan int, error
 				fmt.Println("ctxdone1", i, eq)
 				return
 			case <-wait:
-				//fmt.Println("CONSUMED WAIT: ", i)
+				// fmt.Println("CONSUMED WAIT: ", i)
 			}
 
 			n += i
@@ -955,8 +954,7 @@ func TestServerChanLockClose(t *testing.T) {
 	<-serverHandler.ctxdone
 }
 
-type StreamingHandler struct {
-}
+type StreamingHandler struct{}
 
 func (h *StreamingHandler) GetData(ctx context.Context, n int) (<-chan int, error) {
 	out := make(chan int)
@@ -1020,7 +1018,6 @@ func TestChanClientReceiveAll(t *testing.T) {
 
 	tcancel()
 	testServ.Close()
-
 }
 
 func TestControlChanDeadlock(t *testing.T) {
@@ -1091,8 +1088,7 @@ func testControlChanDeadlock(t *testing.T) {
 	<-done
 }
 
-type InterfaceHandler struct {
-}
+type InterfaceHandler struct{}
 
 func (h *InterfaceHandler) ReadAll(ctx context.Context, r io.Reader) ([]byte, error) {
 	return io.ReadAll(r)
@@ -1349,8 +1345,7 @@ func TestNotif(t *testing.T) {
 	t.Run("http", tc("http"))
 }
 
-type RawParamHandler struct {
-}
+type RawParamHandler struct{}
 
 type CustomParams struct {
 	I int
@@ -1393,8 +1388,7 @@ func TestCallWithRawParams(t *testing.T) {
 	closer()
 }
 
-type RevCallTestServerHandler struct {
-}
+type RevCallTestServerHandler struct{}
 
 func (h *RevCallTestServerHandler) Call(ctx context.Context) error {
 	revClient, ok := ExtractReverseClient[RevCallTestClientProxy](ctx)
@@ -1418,8 +1412,7 @@ type RevCallTestClientProxy struct {
 	CallOnClient func(int) (int, error)
 }
 
-type RevCallTestClientHandler struct {
-}
+type RevCallTestClientHandler struct{}
 
 func (h *RevCallTestClientHandler) CallOnClient(a int) (int, error) {
 	return a * 2, nil
@@ -1453,8 +1446,7 @@ func TestReverseCall(t *testing.T) {
 	closer()
 }
 
-type RevCallTestServerHandlerAliased struct {
-}
+type RevCallTestServerHandlerAliased struct{}
 
 func (h *RevCallTestServerHandlerAliased) Call(ctx context.Context) error {
 	revClient, ok := ExtractReverseClient[RevCallTestClientProxyAliased](ctx)
@@ -1565,8 +1557,7 @@ func TestReverseCallDroppedConn(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 }
 
-type BigCallTestServerHandler struct {
-}
+type BigCallTestServerHandler struct{}
 
 type RecRes struct {
 	I int

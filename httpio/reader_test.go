@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/caeret/logging"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/require"
 
-	"github.com/filecoin-project/go-jsonrpc"
+	jsonrpc "github.com/caeret/go-jsonrpc"
 )
 
-type ReaderHandler struct {
-}
+type ReaderHandler struct{}
 
 func (h *ReaderHandler) ReadAll(ctx context.Context, r io.Reader) ([]byte, error) {
 	return io.ReadAll(r)
@@ -31,8 +31,8 @@ func TestReaderProxy(t *testing.T) {
 
 	serverHandler := &ReaderHandler{}
 
-	readerHandler, readerServerOpt := ReaderParamDecoder()
-	rpcServer := jsonrpc.NewServer(readerServerOpt)
+	readerHandler, readerServerOpt := ReaderParamDecoder(logging.Default())
+	rpcServer := jsonrpc.NewServer(logging.Default(), readerServerOpt)
 	rpcServer.Register("ReaderHandler", serverHandler)
 
 	mux := mux.NewRouter()
@@ -42,8 +42,8 @@ func TestReaderProxy(t *testing.T) {
 	testServ := httptest.NewServer(mux)
 	defer testServ.Close()
 
-	re := ReaderParamEncoder("http://" + testServ.Listener.Addr().String() + "/rpc/streams/v0/push")
-	closer, err := jsonrpc.NewMergeClient(context.Background(), "ws://"+testServ.Listener.Addr().String()+"/rpc/v0", "ReaderHandler", []interface{}{&client}, nil, re)
+	re := ReaderParamEncoder(logging.Default(), "http://"+testServ.Listener.Addr().String()+"/rpc/streams/v0/push")
+	closer, err := jsonrpc.NewMergeClient(context.Background(), logging.Default(), "ws://"+testServ.Listener.Addr().String()+"/rpc/v0", "ReaderHandler", []interface{}{&client}, nil, re)
 	require.NoError(t, err)
 
 	defer closer()
