@@ -9,7 +9,6 @@ import (
 )
 
 type Handler struct {
-	Logger logging.Logger
 	Verify func(ctx context.Context, token string) ([]Permission, error)
 	Next   http.HandlerFunc
 }
@@ -27,7 +26,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if token != "" {
 		if !strings.HasPrefix(token, "Bearer ") {
-			h.Logger.Warn("missing Bearer prefix in auth header")
+			logging.Warn("missing Bearer prefix in auth header")
 			w.WriteHeader(401)
 			return
 		}
@@ -35,7 +34,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		allow, err := h.Verify(ctx, token)
 		if err != nil {
-			h.Logger.Warn("JWT Verification failed", "from", r.RemoteAddr, "error", err)
+			logging.Warn("JWT Verification failed", "from", r.RemoteAddr, "error", err)
 			w.WriteHeader(401)
 			return
 		}
