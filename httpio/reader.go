@@ -18,7 +18,7 @@ import (
 	jsonrpc "github.com/caeret/go-jsonrpc"
 )
 
-func ReaderParamEncoder(addr string) jsonrpc.Option {
+func ReaderParamEncoder(logger logging.Logger, addr string) jsonrpc.Option {
 	return jsonrpc.WithParamEncoder(new(io.Reader), func(value reflect.Value) (reflect.Value, error) {
 		r := value.Interface().(io.Reader)
 
@@ -31,14 +31,14 @@ func ReaderParamEncoder(addr string) jsonrpc.Option {
 
 			resp, err := http.Post(u.String(), "application/octet-stream", r)
 			if err != nil {
-				logging.Error("sending reader param", "error", err)
+				logger.Error("sending reader param", "error", err)
 				return
 			}
 
 			defer resp.Body.Close()
 
 			if resp.StatusCode != 200 {
-				logging.Error("sending reader param: non-200 status", "status", resp.Status)
+				logger.Error("sending reader param: non-200 status", "status", resp.Status)
 				return
 			}
 		}()

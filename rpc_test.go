@@ -19,14 +19,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/caeret/logging"
 	"github.com/gorilla/websocket"
+	logging "github.com/ipfs/go-log/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
 )
 
 func init() {
+	if _, exists := os.LookupEnv("GOLOG_LOG_LEVEL"); !exists {
+		if err := logging.SetLogLevel("rpc", "DEBUG"); err != nil {
+			panic(err)
+		}
+	}
+
 	debugTrace = true
 }
 
@@ -676,7 +682,7 @@ func (h *ChanHandler) Sub(ctx context.Context, i int, eq int) (<-chan int, error
 
 	wait := h.wait
 
-	logging.Warn("SERVER SUB!")
+	log.Warnf("SERVER SUB!")
 	go func() {
 		defer close(out)
 		var n int
@@ -766,13 +772,13 @@ func TestChan(t *testing.T) {
 	ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 
-	logging.Warn("last sub")
+	log.Warnf("last sub")
 	sub, err = client.Sub(ctx, 3, 6)
 	require.NoError(t, err)
 
-	logging.Warn("waiting for value now")
+	log.Warnf("waiting for value now")
 	require.Equal(t, 3, <-sub)
-	logging.Warn("not equal")
+	log.Warnf("not equal")
 
 	// close (remote)
 	serverHandler.wait <- struct{}{}
@@ -1015,6 +1021,13 @@ func TestChanClientReceiveAll(t *testing.T) {
 }
 
 func TestControlChanDeadlock(t *testing.T) {
+	if _, exists := os.LookupEnv("GOLOG_LOG_LEVEL"); !exists {
+		_ = logging.SetLogLevel("rpc", "error")
+		defer func() {
+			_ = logging.SetLogLevel("rpc", "DEBUG")
+		}()
+	}
+
 	for r := 0; r < 20; r++ {
 		testControlChanDeadlock(t)
 	}
