@@ -146,7 +146,7 @@ func (c *wsConn) nextWriter(cb func(io.Writer)) {
 	cb(wcl)
 
 	if err := wcl.Close(); err != nil {
-		c.logger.Error("handle me", err)
+		c.logger.Error("handle me", "error", err)
 		return
 	}
 }
@@ -216,7 +216,7 @@ func (c *wsConn) handleOutChans() {
 				}
 
 				if err := json.NewEncoder(w).Encode(resp); err != nil {
-					c.logger.Error("nextWriter", err)
+					c.logger.Error("nextWriter", "error", err)
 					return
 				}
 			})
@@ -269,7 +269,7 @@ func (c *wsConn) handleOutChans() {
 		// forward message
 		rp, err := json.Marshal([]param{{v: reflect.ValueOf(caseToID[chosen-internal])}, {v: val}})
 		if err != nil {
-			c.logger.Error("marshaling params for sendRequest failed", "err", err)
+			c.logger.Error("marshaling params for sendRequest failed", "error", err)
 			continue
 		}
 
@@ -321,7 +321,7 @@ func (c *wsConn) handleCtxAsync(actx context.Context, id interface{}) {
 
 	rp, err := json.Marshal([]param{{v: reflect.ValueOf(id)}})
 	if err != nil {
-		c.logger.Error("marshaling params for sendRequest failed", "err", err)
+		c.logger.Error("marshaling params for sendRequest failed", "error", err)
 		return
 	}
 
@@ -903,7 +903,7 @@ type deadlineResetReader struct {
 func (r *deadlineResetReader) Read(p []byte) (n int, err error) {
 	n, err = r.r.Read(p)
 	if time.Since(r.lastReset) > onReadDeadlineResetInterval {
-		r.logger.Warn("slow/large read, resetting deadline while reading the frame", "since", time.Since(r.lastReset), "n", n, "err", err, "p", len(p))
+		r.logger.Warn("slow/large read, resetting deadline while reading the frame", "since", time.Since(r.lastReset), "n", n, "error", err, "p", len(p))
 
 		r.reset()
 		r.lastReset = time.Now()

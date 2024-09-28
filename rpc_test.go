@@ -19,20 +19,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/caeret/logging"
 	"github.com/gorilla/websocket"
-	logging "github.com/ipfs/go-log/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
 )
 
 func init() {
-	if _, exists := os.LookupEnv("GOLOG_LOG_LEVEL"); !exists {
-		if err := logging.SetLogLevel("rpc", "DEBUG"); err != nil {
-			panic(err)
-		}
-	}
-
 	debugTrace = true
 }
 
@@ -86,7 +80,7 @@ func (h *SimpleServerHandler) StringMatch(t TestType, i2 int64) (out TestOut, er
 func TestRawRequests(t *testing.T) {
 	rpcHandler := SimpleServerHandler{}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("SimpleServerHandler", &rpcHandler)
 
 	testServ := httptest.NewServer(rpcServer)
@@ -149,7 +143,7 @@ func TestReconnection(t *testing.T) {
 
 	rpcHandler := SimpleServerHandler{}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("SimpleServerHandler", &rpcHandler)
 
 	testServ := httptest.NewServer(rpcServer)
@@ -164,7 +158,7 @@ func TestReconnection(t *testing.T) {
 	// record the number of connection attempts during this test
 	connectionAttempts := int64(1)
 
-	closer, err := NewMergeClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", []interface{}{&rpcClient}, nil, func(c *Config) {
+	closer, err := NewMergeClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", []interface{}{&rpcClient}, nil, func(c *Config) {
 		c.proxyConnFactory = func(f func() (*websocket.Conn, error)) func() (*websocket.Conn, error) {
 			return func() (*websocket.Conn, error) {
 				defer func() {
@@ -208,7 +202,7 @@ func TestRPCBadConnection(t *testing.T) {
 
 	serverHandler := &SimpleServerHandler{}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("SimpleServerHandler", serverHandler)
 
 	// httptest stuff
@@ -222,7 +216,7 @@ func TestRPCBadConnection(t *testing.T) {
 		StringMatch func(t TestType, i2 int64) (out TestOut, err error)
 		ErrChanSub  func(context.Context) (<-chan int, error)
 	}
-	closer, err := NewClient(context.Background(), "http://"+testServ.Listener.Addr().String()+"0", "SimpleServerHandler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "http://"+testServ.Listener.Addr().String()+"0", "SimpleServerHandler", &client, nil)
 	require.NoError(t, err)
 	err = client.Add(2)
 	require.True(t, errors.As(err, new(*RPCConnectionError)))
@@ -235,7 +229,7 @@ func TestRPC(t *testing.T) {
 
 	serverHandler := &SimpleServerHandler{}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("SimpleServerHandler", serverHandler)
 
 	// httptest stuff
@@ -249,7 +243,7 @@ func TestRPC(t *testing.T) {
 		StringMatch func(t TestType, i2 int64) (out TestOut, err error)
 		ErrChanSub  func(context.Context) (<-chan int, error)
 	}
-	closer, err := NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &client, nil)
 	require.NoError(t, err)
 	defer closer()
 
@@ -294,7 +288,7 @@ func TestRPC(t *testing.T) {
 	var noret struct {
 		Add func(int)
 	}
-	closer, err = NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &noret, nil)
+	closer, err = NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &noret, nil)
 	require.NoError(t, err)
 
 	// this one should actually work
@@ -305,7 +299,7 @@ func TestRPC(t *testing.T) {
 	var noparam struct {
 		Add func()
 	}
-	closer, err = NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &noparam, nil)
+	closer, err = NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &noparam, nil)
 	require.NoError(t, err)
 
 	// shouldn't panic
@@ -315,7 +309,7 @@ func TestRPC(t *testing.T) {
 	var erronly struct {
 		AddGet func() (int, error)
 	}
-	closer, err = NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &erronly, nil)
+	closer, err = NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &erronly, nil)
 	require.NoError(t, err)
 
 	_, err = erronly.AddGet()
@@ -327,7 +321,7 @@ func TestRPC(t *testing.T) {
 	var wrongtype struct {
 		Add func(string) error
 	}
-	closer, err = NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &wrongtype, nil)
+	closer, err = NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &wrongtype, nil)
 	require.NoError(t, err)
 
 	err = wrongtype.Add("not an int")
@@ -339,7 +333,7 @@ func TestRPC(t *testing.T) {
 	var notfound struct {
 		NotThere func(string) error
 	}
-	closer, err = NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &notfound, nil)
+	closer, err = NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &notfound, nil)
 	require.NoError(t, err)
 
 	err = notfound.NotThere("hello?")
@@ -354,7 +348,7 @@ func TestRPCHttpClient(t *testing.T) {
 
 	serverHandler := &SimpleServerHandler{}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("SimpleServerHandler", serverHandler)
 
 	// httptest stuff
@@ -367,7 +361,7 @@ func TestRPCHttpClient(t *testing.T) {
 		AddGet      func(int) int
 		StringMatch func(t TestType, i2 int64) (out TestOut, err error)
 	}
-	closer, err := NewClient(context.Background(), "http://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "http://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &client, nil)
 	require.NoError(t, err)
 	defer closer()
 
@@ -405,7 +399,7 @@ func TestRPCHttpClient(t *testing.T) {
 	var noret struct {
 		Add func(int)
 	}
-	closer, err = NewClient(context.Background(), "http://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &noret, nil)
+	closer, err = NewClient(context.Background(), logging.Nop, "http://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &noret, nil)
 	require.NoError(t, err)
 
 	// this one should actually work
@@ -416,7 +410,7 @@ func TestRPCHttpClient(t *testing.T) {
 	var noparam struct {
 		Add func()
 	}
-	closer, err = NewClient(context.Background(), "http://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &noparam, nil)
+	closer, err = NewClient(context.Background(), logging.Nop, "http://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &noparam, nil)
 	require.NoError(t, err)
 
 	// shouldn't panic
@@ -426,7 +420,7 @@ func TestRPCHttpClient(t *testing.T) {
 	var erronly struct {
 		AddGet func() (int, error)
 	}
-	closer, err = NewClient(context.Background(), "http://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &erronly, nil)
+	closer, err = NewClient(context.Background(), logging.Nop, "http://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &erronly, nil)
 	require.NoError(t, err)
 
 	_, err = erronly.AddGet()
@@ -438,7 +432,7 @@ func TestRPCHttpClient(t *testing.T) {
 	var wrongtype struct {
 		Add func(string) error
 	}
-	closer, err = NewClient(context.Background(), "http://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &wrongtype, nil)
+	closer, err = NewClient(context.Background(), logging.Nop, "http://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &wrongtype, nil)
 	require.NoError(t, err)
 
 	err = wrongtype.Add("not an int")
@@ -450,7 +444,7 @@ func TestRPCHttpClient(t *testing.T) {
 	var notfound struct {
 		NotThere func(string) error
 	}
-	closer, err = NewClient(context.Background(), "http://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &notfound, nil)
+	closer, err = NewClient(context.Background(), logging.Nop, "http://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &notfound, nil)
 	require.NoError(t, err)
 
 	err = notfound.NotThere("hello?")
@@ -465,7 +459,7 @@ func TestParallelRPC(t *testing.T) {
 
 	serverHandler := &SimpleServerHandler{}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("SimpleServerHandler", serverHandler)
 
 	// httptest stuff
@@ -476,7 +470,7 @@ func TestParallelRPC(t *testing.T) {
 	var client struct {
 		Add func(int) error
 	}
-	closer, err := NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &client, nil)
 	require.NoError(t, err)
 	defer closer()
 
@@ -522,7 +516,7 @@ func TestCtx(t *testing.T) {
 
 	serverHandler := &CtxHandler{}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("CtxHandler", serverHandler)
 
 	// httptest stuff
@@ -534,7 +528,7 @@ func TestCtx(t *testing.T) {
 	var client struct {
 		Test func(ctx context.Context)
 	}
-	closer, err := NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "CtxHandler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "CtxHandler", &client, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -558,7 +552,7 @@ func TestCtx(t *testing.T) {
 	var noCtxClient struct {
 		Test func()
 	}
-	closer, err = NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "CtxHandler", &noCtxClient, nil)
+	closer, err = NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "CtxHandler", &noCtxClient, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -583,7 +577,7 @@ func TestCtxHttp(t *testing.T) {
 
 	serverHandler := &CtxHandler{}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("CtxHandler", serverHandler)
 
 	// httptest stuff
@@ -595,7 +589,7 @@ func TestCtxHttp(t *testing.T) {
 	var client struct {
 		Test func(ctx context.Context)
 	}
-	closer, err := NewClient(context.Background(), "http://"+testServ.Listener.Addr().String(), "CtxHandler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "http://"+testServ.Listener.Addr().String(), "CtxHandler", &client, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -619,7 +613,7 @@ func TestCtxHttp(t *testing.T) {
 	var noCtxClient struct {
 		Test func()
 	}
-	closer, err = NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "CtxHandler", &noCtxClient, nil)
+	closer, err = NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "CtxHandler", &noCtxClient, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -657,13 +651,13 @@ func TestUnmarshalableResult(t *testing.T) {
 		GetUnUnmarshalableStuff func() (UnUnmarshalable, error)
 	}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("Handler", &UnUnmarshalableHandler{})
 
 	testServ := httptest.NewServer(rpcServer)
 	defer testServ.Close()
 
-	closer, err := NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "Handler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "Handler", &client, nil)
 	require.NoError(t, err)
 	defer closer()
 
@@ -682,7 +676,7 @@ func (h *ChanHandler) Sub(ctx context.Context, i int, eq int) (<-chan int, error
 
 	wait := h.wait
 
-	log.Warnf("SERVER SUB!")
+	logging.Warn("SERVER SUB!")
 	go func() {
 		defer close(out)
 		var n int
@@ -724,13 +718,13 @@ func TestChan(t *testing.T) {
 		wait: make(chan struct{}, 5),
 	}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("ChanHandler", serverHandler)
 
 	testServ := httptest.NewServer(rpcServer)
 	defer testServ.Close()
 
-	closer, err := NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "ChanHandler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "ChanHandler", &client, nil)
 	require.NoError(t, err)
 
 	defer closer()
@@ -772,13 +766,13 @@ func TestChan(t *testing.T) {
 	ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 
-	log.Warnf("last sub")
+	logging.Warn("last sub")
 	sub, err = client.Sub(ctx, 3, 6)
 	require.NoError(t, err)
 
-	log.Warnf("waiting for value now")
+	logging.Warn("waiting for value now")
 	require.Equal(t, 3, <-sub)
-	log.Warnf("not equal")
+	logging.Warn("not equal")
 
 	// close (remote)
 	serverHandler.wait <- struct{}{}
@@ -795,13 +789,13 @@ func TestChanClosing(t *testing.T) {
 		wait: make(chan struct{}, 5),
 	}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("ChanHandler", serverHandler)
 
 	testServ := httptest.NewServer(rpcServer)
 	defer testServ.Close()
 
-	closer, err := NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "ChanHandler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "ChanHandler", &client, nil)
 	require.NoError(t, err)
 
 	defer closer()
@@ -846,7 +840,7 @@ func TestChanServerClose(t *testing.T) {
 		wait: make(chan struct{}, 5),
 	}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("ChanHandler", serverHandler)
 
 	tctx, tcancel := context.WithCancel(context.Background())
@@ -857,7 +851,7 @@ func TestChanServerClose(t *testing.T) {
 	}
 	testServ.Start()
 
-	closer, err := NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "ChanHandler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "ChanHandler", &client, nil)
 	require.NoError(t, err)
 
 	defer closer()
@@ -902,14 +896,14 @@ func TestServerChanLockClose(t *testing.T) {
 		wait: make(chan struct{}),
 	}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("ChanHandler", serverHandler)
 
 	testServ := httptest.NewServer(rpcServer)
 
 	var closeConn func() error
 
-	_, err := NewMergeClient(context.Background(), "ws://"+testServ.Listener.Addr().String(),
+	_, err := NewMergeClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(),
 		"ChanHandler",
 		[]interface{}{&client}, nil,
 		func(c *Config) {
@@ -977,7 +971,7 @@ func TestChanClientReceiveAll(t *testing.T) {
 
 	serverHandler := &StreamingHandler{}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("ChanHandler", serverHandler)
 
 	tctx, tcancel := context.WithCancel(context.Background())
@@ -988,7 +982,7 @@ func TestChanClientReceiveAll(t *testing.T) {
 	}
 	testServ.Start()
 
-	closer, err := NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "ChanHandler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "ChanHandler", &client, nil)
 	require.NoError(t, err)
 
 	defer closer()
@@ -1021,13 +1015,6 @@ func TestChanClientReceiveAll(t *testing.T) {
 }
 
 func TestControlChanDeadlock(t *testing.T) {
-	if _, exists := os.LookupEnv("GOLOG_LOG_LEVEL"); !exists {
-		_ = logging.SetLogLevel("rpc", "error")
-		defer func() {
-			_ = logging.SetLogLevel("rpc", "DEBUG")
-		}()
-	}
-
 	for r := 0; r < 20; r++ {
 		testControlChanDeadlock(t)
 	}
@@ -1044,13 +1031,13 @@ func testControlChanDeadlock(t *testing.T) {
 		wait: make(chan struct{}, n),
 	}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("ChanHandler", serverHandler)
 
 	testServ := httptest.NewServer(rpcServer)
 	defer testServ.Close()
 
-	closer, err := NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "ChanHandler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "ChanHandler", &client, nil)
 	require.NoError(t, err)
 
 	defer closer()
@@ -1101,13 +1088,13 @@ func TestInterfaceHandler(t *testing.T) {
 
 	serverHandler := &InterfaceHandler{}
 
-	rpcServer := NewServer(WithParamDecoder(new(io.Reader), readerDec))
+	rpcServer := NewServer(logging.Nop, WithParamDecoder(new(io.Reader), readerDec))
 	rpcServer.Register("InterfaceHandler", serverHandler)
 
 	testServ := httptest.NewServer(rpcServer)
 	defer testServ.Close()
 
-	closer, err := NewMergeClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "InterfaceHandler", []interface{}{&client}, nil, WithParamEncoder(new(io.Reader), readerEnc))
+	closer, err := NewMergeClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "InterfaceHandler", []interface{}{&client}, nil, WithParamEncoder(new(io.Reader), readerEnc))
 	require.NoError(t, err)
 
 	defer closer()
@@ -1202,7 +1189,7 @@ func TestUserError(t *testing.T) {
 	errs.Register(EBad2, new(*ErrSomethingBad))
 	errs.Register(EMy, new(*ErrMyErr))
 
-	rpcServer := NewServer(WithServerErrors(errs))
+	rpcServer := NewServer(logging.Nop, WithServerErrors(errs))
 	rpcServer.Register("ErrHandler", serverHandler)
 
 	// httptest stuff
@@ -1216,7 +1203,7 @@ func TestUserError(t *testing.T) {
 		TestP  func() error
 		TestMy func(s string) error
 	}
-	closer, err := NewMergeClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "ErrHandler", []interface{}{
+	closer, err := NewMergeClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "ErrHandler", []interface{}{
 		&client,
 	}, nil, WithErrors(errs))
 	require.NoError(t, err)
@@ -1270,7 +1257,7 @@ func TestIDHandling(t *testing.T) {
 func TestAliasedCall(t *testing.T) {
 	// setup server
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("ServName", &SimpleServerHandler{n: 3})
 
 	// httptest stuff
@@ -1281,7 +1268,7 @@ func TestAliasedCall(t *testing.T) {
 	var client struct {
 		WhateverMethodName func(int) (int, error) `rpc_method:"ServName.AddGet"`
 	}
-	closer, err := NewMergeClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "Server", []interface{}{
+	closer, err := NewMergeClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "Server", []interface{}{
 		&client,
 	}, nil)
 	require.NoError(t, err)
@@ -1313,7 +1300,7 @@ func TestNotif(t *testing.T) {
 				notified: make(chan struct{}),
 			}
 
-			rpcServer := NewServer()
+			rpcServer := NewServer(logging.Nop)
 			rpcServer.Register("Notif", nh)
 
 			// httptest stuff
@@ -1324,7 +1311,7 @@ func TestNotif(t *testing.T) {
 			var client struct {
 				Notif func() error `notify:"true"`
 			}
-			closer, err := NewMergeClient(context.Background(), proto+"://"+testServ.Listener.Addr().String(), "Notif", []interface{}{
+			closer, err := NewMergeClient(context.Background(), logging.Nop, proto+"://"+testServ.Listener.Addr().String(), "Notif", []interface{}{
 				&client,
 			}, nil)
 			require.NoError(t, err)
@@ -1362,7 +1349,7 @@ func (h *RawParamHandler) Call(ctx context.Context, ps RawParams) (int, error) {
 func TestCallWithRawParams(t *testing.T) {
 	// setup server
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("Raw", &RawParamHandler{})
 
 	// httptest stuff
@@ -1373,7 +1360,7 @@ func TestCallWithRawParams(t *testing.T) {
 	var client struct {
 		Call func(ctx context.Context, ps RawParams) (int, error)
 	}
-	closer, err := NewMergeClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "Raw", []interface{}{
+	closer, err := NewMergeClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "Raw", []interface{}{
 		&client,
 	}, nil)
 	require.NoError(t, err)
@@ -1421,7 +1408,7 @@ func (h *RevCallTestClientHandler) CallOnClient(a int) (int, error) {
 func TestReverseCall(t *testing.T) {
 	// setup server
 
-	rpcServer := NewServer(WithReverseClient[RevCallTestClientProxy]("Client"))
+	rpcServer := NewServer(logging.Nop, WithReverseClient[RevCallTestClientProxy](logging.Nop, "Client"))
 	rpcServer.Register("Server", &RevCallTestServerHandler{})
 
 	// httptest stuff
@@ -1433,7 +1420,7 @@ func TestReverseCall(t *testing.T) {
 	var client struct {
 		Call func() error
 	}
-	closer, err := NewMergeClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "Server", []interface{}{
+	closer, err := NewMergeClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "Server", []interface{}{
 		&client,
 	}, nil, WithClientHandler("Client", &RevCallTestClientHandler{}))
 	require.NoError(t, err)
@@ -1473,7 +1460,7 @@ type RevCallTestClientProxyAliased struct {
 func TestReverseCallAliased(t *testing.T) {
 	// setup server
 
-	rpcServer := NewServer(WithReverseClient[RevCallTestClientProxyAliased]("Client"))
+	rpcServer := NewServer(logging.Nop, WithReverseClient[RevCallTestClientProxyAliased](logging.Nop, "Client"))
 	rpcServer.Register("Server", &RevCallTestServerHandlerAliased{})
 
 	// httptest stuff
@@ -1485,7 +1472,7 @@ func TestReverseCallAliased(t *testing.T) {
 	var client struct {
 		Call func() error
 	}
-	closer, err := NewMergeClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "Server", []interface{}{
+	closer, err := NewMergeClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "Server", []interface{}{
 		&client,
 	}, nil, WithClientHandler("Client", &RevCallTestClientHandler{}), WithClientHandlerAlias("rpc_thing", "Client.CallOnClient"))
 	require.NoError(t, err)
@@ -1526,7 +1513,7 @@ func TestReverseCallDroppedConn(t *testing.T) {
 		res: make(chan error),
 	}
 
-	rpcServer := NewServer(WithReverseClient[RevCallTestClientProxy]("Client"))
+	rpcServer := NewServer(logging.Nop, WithReverseClient[RevCallTestClientProxy](logging.Nop, "Client"))
 	rpcServer.Register("Server", hnd)
 
 	// httptest stuff
@@ -1538,7 +1525,7 @@ func TestReverseCallDroppedConn(t *testing.T) {
 	var client struct {
 		Call func() error
 	}
-	closer, err := NewMergeClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "Server", []interface{}{
+	closer, err := NewMergeClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "Server", []interface{}{
 		&client,
 	}, nil, WithClientHandler("Client", &RevCallTestClientHandler{}))
 	require.NoError(t, err)
@@ -1621,7 +1608,7 @@ func TestBigResult(t *testing.T) {
 
 	serverHandler := &BigCallTestServerHandler{}
 
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("SimpleServerHandler", serverHandler)
 
 	// httptest stuff
@@ -1633,7 +1620,7 @@ func TestBigResult(t *testing.T) {
 		Do func() (RecRes, error)
 		Ch func(ctx context.Context) (<-chan int, error)
 	}
-	closer, err := NewClient(context.Background(), "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &client, nil)
+	closer, err := NewClient(context.Background(), logging.Nop, "ws://"+testServ.Listener.Addr().String(), "SimpleServerHandler", &client, nil)
 	require.NoError(t, err)
 	defer closer()
 
@@ -1666,7 +1653,7 @@ func TestBigResult(t *testing.T) {
 func TestNewCustomClient(t *testing.T) {
 	// Setup server
 	serverHandler := &SimpleServerHandler{}
-	rpcServer := NewServer()
+	rpcServer := NewServer(logging.Nop)
 	rpcServer.Register("SimpleServerHandler", serverHandler)
 
 	// Custom doRequest function
@@ -1686,7 +1673,7 @@ func TestNewCustomClient(t *testing.T) {
 	}
 
 	// Create custom client
-	closer, err := NewCustomClient("SimpleServerHandler", []interface{}{&client}, doRequest)
+	closer, err := NewCustomClient(logging.Nop, "SimpleServerHandler", []interface{}{&client}, doRequest)
 	require.NoError(t, err)
 	defer closer()
 

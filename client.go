@@ -129,13 +129,14 @@ func NewMergeClient(ctx context.Context, logger logging.Logger, addr string, nam
 }
 
 // NewCustomClient is like NewMergeClient in single-request (http) mode, except it allows for a custom doRequest function
-func NewCustomClient(namespace string, outs []interface{}, doRequest func(ctx context.Context, body []byte) (io.ReadCloser, error), opts ...Option) (ClientCloser, error) {
+func NewCustomClient(logger logging.Logger, namespace string, outs []interface{}, doRequest func(ctx context.Context, body []byte) (io.ReadCloser, error), opts ...Option) (ClientCloser, error) {
 	config := defaultConfig()
 	for _, o := range opts {
 		o(&config)
 	}
 
 	c := client{
+		logger:        logger,
 		namespace:     namespace,
 		paramEncoders: config.paramEncoders,
 		errors:        config.errors,
@@ -309,6 +310,7 @@ func websocketClient(ctx context.Context, logger logging.Logger, addr string, na
 	}
 
 	wconn := &wsConn{
+		logger:           logger,
 		conn:             conn,
 		connFactory:      connFactory,
 		reconnectBackoff: config.reconnectBackoff,

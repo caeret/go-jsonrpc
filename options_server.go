@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/caeret/logging"
 	"golang.org/x/xerrors"
 )
 
@@ -69,10 +70,11 @@ func WithTracer(l Tracer) ServerOption {
 
 // WithReverseClient will allow extracting reverse client on **WEBSOCKET** calls.
 // RP is a proxy-struct type, much like the one passed to NewClient.
-func WithReverseClient[RP any](namespace string) ServerOption {
+func WithReverseClient[RP any](logger logging.Logger, namespace string) ServerOption {
 	return func(c *ServerConfig) {
 		c.reverseClientBuilder = func(ctx context.Context, conn *wsConn) (context.Context, error) {
 			cl := client{
+				logger:        logger,
 				namespace:     namespace,
 				paramEncoders: map[reflect.Type]ParamEncoder{},
 			}
